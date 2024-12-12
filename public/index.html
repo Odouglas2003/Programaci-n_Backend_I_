@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat Estilo WhatsApp</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f0f0f0;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+        }
+
+        #chat-container {
+            width: 90%;
+            max-width: 600px;
+            height: 80vh;
+            background: #fff;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        #messages {
+            flex: 1;
+            padding: 10px;
+            overflow-y: auto;
+            background: #e5ddd5;
+        }
+
+        .message {
+            margin: 5px 0;
+            max-width: 70%;
+            padding: 10px 15px;
+            border-radius: 10px;
+            font-size: 14px;
+            word-wrap: break-word;
+        }
+
+        .sent {
+            align-self: flex-end;
+            background-color: #dcf8c6;
+        }
+
+        .received {
+            align-self: flex-start;
+            background-color: #fff;
+            border: 1px solid #ddd;
+        }
+
+        #input-container {
+            display: flex;
+            padding: 10px;
+            background: #f7f7f7;
+            border-top: 1px solid #ddd;
+        }
+
+        #message {
+            flex: 1;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+
+        button {
+            margin-left: 10px;
+            padding: 10px 15px;
+            background: #25d366;
+            color: #fff;
+            border: none;
+            border-radius: 5px;
+            font-size: 14px;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background: #1da851;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="chat-container">
+        <div id="messages"></div>
+        <div id="input-container">
+            <input type="text" id="message" placeholder="Escribe tu mensaje" />
+            <button onclick="sendMessage()">Enviar</button>
+        </div>
+    </div>
+
+    <script>
+        const ws = new WebSocket('ws://localhost:8080');
+        const messagesDiv = document.getElementById('messages');
+
+        // ID único del cliente (puede ser generado de forma aleatoria o con tu nombre de usuario)
+        const clientId = Math.random().toString(36).substr(2, 9);
+
+        ws.onopen = () => console.log('Conectado');
+        ws.onerror = (error) => console.error('Error en WebSocket:', error);
+
+        // Recibir mensajes del servidor
+        ws.onmessage = (event) => {
+            const data = JSON.parse(event.data); // Parseamos el mensaje como JSON
+
+            // Si el mensaje viene del mismo cliente, no lo mostramos
+            if (data.clientId === clientId) return;
+
+            const message = document.createElement('div');
+            message.textContent = data.message;
+            message.className = 'message received';
+            messagesDiv.appendChild(message);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight; // Auto-scroll
+        };
+
+        // Enviar mensaje al servidor
+        function sendMessage() {
+            const input = document.getElementById('message');
+            const message = input.value;
+            if (message.trim() === '') return;
+
+            // Enviar el mensaje con el identificador único
+            ws.send(JSON.stringify({ clientId, message }));
+
+            // Mostrar el mensaje enviado
+            const sentMessage = document.createElement('div');
+            sentMessage.textContent = message;
+            sentMessage.className = 'message sent';
+            messagesDiv.appendChild(sentMessage);
+
+            // Limpiar el campo de entrada y hacer auto-scroll
+            input.value = '';
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+
+    </script>
+</body>
+
+</html>
