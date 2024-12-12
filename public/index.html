@@ -6,140 +6,222 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Chat Estilo WhatsApp</title>
     <style>
-        body {
+         body {
             font-family: Arial, sans-serif;
-            background-color: #f0f0f0;
             margin: 0;
-            padding: 0;
             display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
             height: 100vh;
         }
 
-        #chat-container {
-            width: 90%;
-            max-width: 600px;
-            height: 80vh;
-            background: #fff;
-            border-radius: 10px;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        .container {
             display: flex;
-            flex-direction: column;
-            overflow: hidden;
+            flex: 1;
         }
 
-        #messages {
+        .users {
+            width: 30%;
+            background-color: #f7f7f7;
+            border-right: 1px solid #ddd;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .users h2 {
+            text-align: center;
+            padding: 10px;
+            background-color: #eee;
+            border-bottom: 1px solid #ddd;
+            margin: 0;
+        }
+
+        .user {
+            padding: 10px;
+            cursor: pointer;
+            border-bottom: 1px solid #ddd;
+        }
+
+        .user:hover {
+            background-color: #e6e6e6;
+        }
+
+        .user.active {
+            background-color: #d9fdd3;
+        }
+
+        .chat {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .chat-header {
+            padding: 10px;
+            background-color: #eee;
+            border-bottom: 1px solid #ddd;
+        }
+
+        .messages {
             flex: 1;
             padding: 10px;
             overflow-y: auto;
-            background: #e5ddd5;
+            background-color: #f0f0f0;
         }
 
         .message {
+            padding: 5px 10px;
             margin: 5px 0;
+            border-radius: 5px;
             max-width: 70%;
-            padding: 10px 15px;
-            border-radius: 10px;
-            font-size: 14px;
-            word-wrap: break-word;
         }
 
-        .sent {
-            align-self: flex-end;
+        .message.sent {
             background-color: #dcf8c6;
+            align-self: flex-end;
         }
 
-        .received {
-            align-self: flex-start;
+        .message.received {
             background-color: #fff;
-            border: 1px solid #ddd;
+            align-self: flex-start;
         }
 
-        #input-container {
-            display: flex;
+        .chat-input {
             padding: 10px;
-            background: #f7f7f7;
             border-top: 1px solid #ddd;
+            display: flex;
         }
 
-        #message {
+        .chat-input input {
             flex: 1;
             padding: 10px;
-            border: 1px solid #ccc;
+            border: 1px solid #ddd;
             border-radius: 5px;
-            font-size: 14px;
         }
 
-        button {
+        .chat-input button {
             margin-left: 10px;
-            padding: 10px 15px;
-            background: #25d366;
-            color: #fff;
+            padding: 10px;
+            background-color: #25d366;
+            color: white;
             border: none;
             border-radius: 5px;
-            font-size: 14px;
             cursor: pointer;
         }
 
-        button:hover {
-            background: #1da851;
+        .chat-input button:hover {
+            background-color: #1da955;
         }
     </style>
 </head>
 
 <body>
-    <div id="chat-container">
-        <div id="messages"></div>
-        <div id="input-container">
-            <input type="text" id="message" placeholder="Escribe tu mensaje" />
-            <button onclick="sendMessage()">Enviar</button>
+    <div class="container">
+        <div class="users">
+            <h2>Usuarios Conectados</h2>
+            <div id="user-list"></div>
+        </div>
+        <div class="chat">
+            <div class="chat-header" id="chat-header">Selecciona un usuario</div>
+            <div class="messages" id="messages"></div>
+            <div class="chat-input">
+                <input id="message" placeholder="Escribe tu mensaje..." />
+                <button onclick="sendMessage()">Enviar</button>
+            </div>
         </div>
     </div>
 
     <script>
         const ws = new WebSocket('ws://localhost:8080');
         const messagesDiv = document.getElementById('messages');
+        const userListDiv = document.getElementById('user-list');
+        const chatHeader = document.getElementById('chat-header');
+        let username = null;
+        let currentChatUser = null;
 
-        // ID único del cliente (puede ser generado de forma aleatoria o con tu nombre de usuario)
-        const clientId = Math.random().toString(36).substr(2, 9);
+        // Solicita un nombre de usuario al abrir una nueva pestaña
+        while (!username) {
+            username = prompt("Ingresa tu nombre de usuario:");
+            if (!username.trim()) username = null;
+        }
 
-        ws.onopen = () => console.log('Conectado');
-        ws.onerror = (error) => console.error('Error en WebSocket:', error);
-
-        // Recibir mensajes del servidor
-        ws.onmessage = (event) => {
-            const data = JSON.parse(event.data); // Parseamos el mensaje como JSON
-
-            // Si el mensaje viene del mismo cliente, no lo mostramos
-            if (data.clientId === clientId) return;
-
-            const message = document.createElement('div');
-            message.textContent = data.message;
-            message.className = 'message received';
-            messagesDiv.appendChild(message);
-            messagesDiv.scrollTop = messagesDiv.scrollHeight; // Auto-scroll
+        ws.onopen = () => {
+            console.log('Conexión WebSocket establecida');
+            ws.send(JSON.stringify({ type: 'register', username })); // Envía el nombre al servidor
         };
 
-        // Enviar mensaje al servidor
+        ws.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+
+            if (data.type === 'updateUsers') {
+                updateUserList(data.users); // Actualiza la lista de usuarios
+            } else if (data.type === 'message') {
+                if (data.from === currentChatUser) {
+                    displayMessage(data.message, 'received');
+                }
+            } else if (data.type === 'messageHistory') {
+                displayMessageHistory(data.messages); // Muestra el historial de mensajes
+            }
+        };
+
+        // Actualiza la lista de usuarios en el frontend
+        function updateUserList(users) {
+            userListDiv.innerHTML = '';
+            users.forEach((user) => {
+                if (user !== username) {
+                    const userDiv = document.createElement('div');
+                    userDiv.textContent = user;
+                    userDiv.className = 'user';
+                    userDiv.onclick = () => selectChat(user);
+                    userListDiv.appendChild(userDiv);
+                }
+            });
+        }
+
+        // Selecciona un usuario con el que chatear
+        function selectChat(user) {
+            currentChatUser = user;
+            chatHeader.textContent = `Chat con ${user}`;
+            messagesDiv.innerHTML = ''; // Limpia el historial anterior
+            const allUsers = document.querySelectorAll('.user');
+            allUsers.forEach((u) => u.classList.remove('active'));
+            event.target.classList.add('active');
+
+            // Solicita el historial de mensajes del servidor
+            ws.send(JSON.stringify({ type: 'getHistory', to: user, from: username }));
+        }
+
+        // Envía un mensaje al usuario seleccionado
         function sendMessage() {
-            const input = document.getElementById('message');
-            const message = input.value;
-            if (message.trim() === '') return;
+            const message = document.getElementById('message').value.trim();
+            if (currentChatUser && message) {
+                ws.send(JSON.stringify({
+                    type: 'message',
+                    to: currentChatUser,
+                    from: username,
+                    message
+                }));
+                displayMessage(message, 'sent');
+                document.getElementById('message').value = '';
+            } else {
+                alert('Selecciona un usuario para chatear');
+            }
+        }
 
-            // Enviar el mensaje con el identificador único
-            ws.send(JSON.stringify({ clientId, message }));
-
-            // Mostrar el mensaje enviado
-            const sentMessage = document.createElement('div');
-            sentMessage.textContent = message;
-            sentMessage.className = 'message sent';
-            messagesDiv.appendChild(sentMessage);
-
-            // Limpiar el campo de entrada y hacer auto-scroll
-            input.value = '';
+        // Muestra un mensaje en la ventana de chat
+        function displayMessage(message, type) {
+            const messageDiv = document.createElement('div');
+            messageDiv.textContent = message;
+            messageDiv.className = `message ${type}`;
+            messagesDiv.appendChild(messageDiv);
             messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+
+        // Muestra el historial de mensajes en la ventana de chat
+        function displayMessageHistory(messages) {
+            messages.forEach((msg) => {
+                const type = msg.from === username ? 'sent' : 'received';
+                displayMessage(msg.message, type);
+            });
         }
 
     </script>
